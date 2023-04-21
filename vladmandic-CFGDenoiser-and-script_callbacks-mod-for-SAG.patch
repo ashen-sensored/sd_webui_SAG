@@ -1,0 +1,121 @@
+From 5f7879230e3cc2c39c432c7e488de30ef824d598 Mon Sep 17 00:00:00 2001
+From: Ashen <git123@gmail.com>
+Date: Fri, 21 Apr 2023 12:51:42 -0700
+Subject: [PATCH] CFGDenoiser and script_callbacks mod for SAG
+
+---
+ modules/script_callbacks.py       | 36 +++++++++++++++++++++++++++++++
+ modules/sd_samplers_kdiffusion.py |  8 ++++++-
+ 2 files changed, 43 insertions(+), 1 deletion(-)
+
+diff --git a/modules/script_callbacks.py b/modules/script_callbacks.py
+index 700911b7..98cb1d98 100644
+--- a/modules/script_callbacks.py
++++ b/modules/script_callbacks.py
+@@ -50,6 +50,21 @@ class CFGDenoiserParams:
+ 
+ 
+ class CFGDenoisedParams:
++    def __init__(self, x, sampling_step, total_sampling_steps, inner_model):
++        self.x = x
++        """Latent image representation in the process of being denoised"""
++
++        self.sampling_step = sampling_step
++        """Current Sampling step number"""
++
++        self.total_sampling_steps = total_sampling_steps
++        """Total number of sampling steps planned"""
++
++        self.inner_model = inner_model
++        """Inner model reference used for denoising"""
++
++
++class AfterCFGCallbackParams:
+     def __init__(self, x, sampling_step, total_sampling_steps):
+         self.x = x
+         """Latent image representation in the process of being denoised"""
+@@ -60,6 +75,10 @@ class CFGDenoisedParams:
+         self.total_sampling_steps = total_sampling_steps
+         """Total number of sampling steps planned"""
+ 
++        self.output_altered = False
++        """A flag for CFGDenoiser indicating whether the output has been altered by the callback"""
++
++
+ 
+ class UiTrainTabParams:
+     def __init__(self, txt2img_preview_params):
+@@ -84,6 +103,7 @@ callback_map = dict(
+     callbacks_image_saved=[],
+     callbacks_cfg_denoiser=[],
+     callbacks_cfg_denoised=[],
++    callbacks_cfg_after_cfg=[],
+     callbacks_before_component=[],
+     callbacks_after_component=[],
+     callbacks_image_grid=[],
+@@ -174,6 +194,14 @@ def cfg_denoised_callback(params: CFGDenoisedParams):
+             report_exception(e, c, 'cfg_denoised_callback')
+ 
+ 
++def cfg_after_cfg_callback(params: AfterCFGCallbackParams):
++    for c in callback_map['callbacks_cfg_after_cfg']:
++        try:
++            c.callback(params)
++        except Exception as e:
++            report_exception(e, c, 'cfg_after_cfg_callback')
++
++
+ def before_component_callback(component, **kwargs):
+     for c in callback_map['callbacks_before_component']:
+         try:
+@@ -315,6 +343,14 @@ def on_cfg_denoised(callback):
+     add_callback(callback_map['callbacks_cfg_denoised'], callback)
+ 
+ 
++def on_cfg_after_cfg(callback):
++    """register a function to be called in the kdiffussion cfg_denoiser method after cfg calculations are completed.
++    The callback is called with one argument:
++        - params: AfterCFGCallbackParams - parameters to be passed to the script for post-processing after cfg calculation.
++    """
++    add_callback(callback_map['callbacks_cfg_after_cfg'], callback)
++
++
+ def on_before_component(callback):
+     """register a function to be called before a component is created.
+     The callback is called with arguments:
+diff --git a/modules/sd_samplers_kdiffusion.py b/modules/sd_samplers_kdiffusion.py
+index cf694098..3e4f882c 100644
+--- a/modules/sd_samplers_kdiffusion.py
++++ b/modules/sd_samplers_kdiffusion.py
+@@ -8,6 +8,7 @@ from modules.shared import opts, state
+ import modules.shared as shared
+ from modules.script_callbacks import CFGDenoiserParams, cfg_denoiser_callback
+ from modules.script_callbacks import CFGDenoisedParams, cfg_denoised_callback
++from modules.script_callbacks import AfterCFGCallbackParams, cfg_after_cfg_callback
+ 
+ samplers_k_diffusion = [
+     ('Euler a', 'sample_euler_ancestral', ['k_euler_a', 'k_euler_ancestral'], {}),
+@@ -145,7 +146,7 @@ class CFGDenoiser(torch.nn.Module):
+ 
+             x_out[-uncond.shape[0]:] = self.inner_model(x_in[-uncond.shape[0]:], sigma_in[-uncond.shape[0]:], cond=make_condition_dict([uncond], image_cond_in[-uncond.shape[0]:]))
+ 
+-        denoised_params = CFGDenoisedParams(x_out, state.sampling_step, state.sampling_steps)
++        denoised_params = CFGDenoisedParams(x_out, state.sampling_step, state.sampling_steps, self.inner_model)
+         cfg_denoised_callback(denoised_params)
+ 
+         devices.test_for_nans(x_out, "unet")
+@@ -165,6 +166,11 @@ class CFGDenoiser(torch.nn.Module):
+         if self.mask is not None:
+             denoised = self.init_latent * self.mask + self.nmask * denoised
+ 
++        after_cfg_callback_params = AfterCFGCallbackParams(denoised, state.sampling_step, state.sampling_steps)
++        cfg_after_cfg_callback(after_cfg_callback_params)
++        if after_cfg_callback_params.output_altered:
++            denoised = after_cfg_callback_params.x
++
+         self.step += 1
+ 
+         return denoised
+-- 
+2.40.0
+
