@@ -162,7 +162,7 @@ class Script(scripts.Script):
         pass
 
     def title(self):
-        return "Latent Couple extension"
+        return "Self Attention Guidance"
 
     def show(self, is_img2img):
         return scripts.AlwaysVisible

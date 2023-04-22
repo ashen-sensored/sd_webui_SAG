@@ -12,15 +12,11 @@ git apply --ignore-whitespace extensions/sd_webui_SAG/automatic1111-CFGDenoiser-
 ```
 
 
-### For vladmandic webui:
-at commit 7c684a8b
-
-run the following command in root directory automatic/
-```
-git apply --ignore-whitespace extensions/sd_webui_SAG/vladmandic-CFGDenoiser-and-script_callbacks-mod-for-SAG.patch
-```
+### ~~For vladmandic webui:~~
+No longer requires patching after commit [cb465b1](https://github.com/vladmandic/automatic/commit/cb465b12ddc5e4b5f6566030021a26630b927ba6)
+since required changes have been merged to upstream.
 
 
-Demos with stealth pnginfo:
+Demos:
 ![xyz_grid-0014-232592377.png](resources%2Fimg%2Fxyz_grid-0014-232592377.png)
 ![xyz_grid-0001-232592377.png](resources%2Fimg%2Fxyz_grid-0001-232592377.png)
